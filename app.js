@@ -144,7 +144,7 @@ function parseRange(txt, max) {
 // ---------- التشغيل ----------
 const results = [];
 async function run() {
-  const wantDate = $("optDate").checked, wantSign = $("optSign").checked;
+  const wantDate = true, wantSign = false;
   if (!wantDate && !wantSign) { alert("اختار حاجة واحدة على الأقل تقارنها"); return; }
   $("go").disabled = true; $("result").hidden = true; results.length = 0;
   try {
@@ -171,7 +171,7 @@ async function run() {
         const dO = extractDates(pO.words), dN = extractDates(pN.words);
         r.datesOld = dO; r.datesNew = dN;
         if (!pO.words.length && !pN.words.length) {
-          r.noText = true; r.notes.push("الصفحة صورة (مفيش نص)، التاريخ ما اتقراش — راجعها بنفسك أو اختار «التوقيع / الشكل»");
+          r.noText = true; r.notes.push("الصفحة صورة (مفيش نص)، التاريخ ما اتقراش — راجعها بنفسك");
         } else if (!sameList(dO, dN)) {
           r.date = true; r.notes.push(`التاريخ: ${dO.join("، ") || "—"}  ←  ${dN.join("، ") || "—"}`);
         }
@@ -209,12 +209,12 @@ function group(title, rs, cls) {
 }
 
 function show(count) {
-  const wantDate = $("optDate").checked, wantSign = $("optSign").checked;
+  const wantDate = true, wantSign = false;
   const dates = results.filter((r) => r.date), signs = results.filter((r) => r.sign), nt = results.filter((r) => r.noText);
   const any = dates.length || signs.length;
   const v = $("verdict");
   v.className = any ? "diff" : "same";
-  v.innerHTML = any ? `فيه تعديل ⚠️<small>تمت مقارنة ${count} صفحة</small>` : `مفيش تعديل ✅<small>تمت مقارنة ${count} صفحة</small>`;
+  v.innerHTML = any ? `فيه تعديل في التاريخ ⚠️<small>تمت مقارنة ${count} صفحة</small>` : `مفيش تعديل في التاريخ ✅<small>تمت مقارنة ${count} صفحة</small>`;
   const box = $("groups"); box.innerHTML = "";
   if (wantDate) box.appendChild(group("صفحات التاريخ فيها اتغيّر", dates));
   if (wantSign) box.appendChild(group("صفحات التوقيع / الشكل فيها اتغيّر", signs));
