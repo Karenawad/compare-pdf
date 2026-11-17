@@ -112,79 +112,113 @@ function visualDiff(cOld, cNew) {
 
 const toBlob = (c) => new Promise((r) => c.toBlob(r, "image/jpeg", 0.85));
 
+// ---------- التواريخ ----------
+const AR = "٠١٢٣٤٥٦٧٨٩", FA = "۰۱۲۳۴۵۶۷۸۹";
+const normDigits = (s) => s.replace(/[٠-٩]/g, (d) => AR.indexOf(d)).replace(/[۰-۹]/g, (d) => FA.indexOf(d));
+const MONTHS = "يناير|فبراير|مارس|أبريل|ابريل|مايو|يونيو|يوليو|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|ديسمبر|محرم|صفر|ربيع الأول|ربيع الثاني|جمادى الأولى|جمادى الآخرة|رجب|شعبان|رمضان|شوال|ذو القعدة|ذو الحجة|January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec";
+const DATE_RE = new RegExp(
+  "\\d{1,4}\\s*[/\\-.]\\s*\\d{1,2}\\s*[/\\-.]\\s*\\d{1,4}|\\d{1,2}\\s+(?:" + MONTHS + ")\\s+\\d{2,4}|(?:" + MONTHS + ")\\s+\\d{1,2}\\s*,?\\s*\\d{4}", "gi");
+function extractDates(words) {
+  const t = normDigits(words.join(" ")).replace(/\s*([/\-.])\s*/g, "$1");
+  return (t.match(DATE_RE) || []).map((x) => x.replace(/\s+/g, " ").trim()).sort();
+}
+const sameList = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+
+// ---------- نطاق الصفحات ----------
+document.querySelectorAll('input[name="rng"]').forEach((r) =>
+  r.addEventListener("change", () => { $("rngTxt").disabled = r.value !== "custom" || !r.checked; if (r.checked && r.value === "custom") $("rngTxt").focus(); }));
+function parseRange(txt, max) {
+  const set = new Set();
+  const t = normDigits(txt).replace(/[،؛;\s]+/g, ",");
+  for (const part of t.split(",").filter(Boolean)) {
+    const m = part.match(/^(\d+)(?:-(\d+))?$/);
+    if (!m) throw new Error("صيغة الصفحات غلط: " + part);
+    let a = +m[1], b = m[2] ? +m[2] : a;
+    if (a > b) [a, b] = [b, a];
+    for (let i = a; i <= b; i++) if (i >= 1 && i <= max) set.add(i);
+  }
+  if (!set.size) throw new Error("مفيش صفحات صح في النطاق ده (عدد الصفحات " + max + ")");
+  return [...set].sort((x, y) => x - y);
+}
+
 // ---------- التشغيل ----------
 const results = [];
 async function run() {
+  const wantDate = $("optDate").checked, wantSign = $("optSign").checked;
+  if (!wantDate && !wantSign) { alert("اختار حاجة واحدة على الأقل تقارنها"); return; }
   $("go").disabled = true; $("result").hidden = true; results.length = 0;
   try {
     setProgress(0, "تحميل الملفات...");
     const [dOld, dNew] = await Promise.all(
       [files.old, files.new].map(async (f) => pdfjsLib.getDocument({ data: await f.arrayBuffer() }).promise)
     );
-    const total = Math.max(dOld.numPages, dNew.numPages);
-    for (let i = 1; i <= total; i++) {
-      setProgress((i - 1) / total, `مقارنة الصفحة ${i} من ${total}`);
-      const r = { n: i, status: "same", notes: [] };
+    const maxPg = Math.max(dOld.numPages, dNew.numPages);
+    const custom = document.querySelector('input[name="rng"]:checked').value === "custom";
+    const list = custom ? parseRange($("rngTxt").value, maxPg) : Array.from({ length: maxPg }, (_, i) => i + 1);
+    for (let k = 0; k < list.length; k++) {
+      const i = list[k];
+      setProgress(k / list.length, `مقارنة الصفحة ${i} (${k + 1} من ${list.length})`);
+      const r = { n: i, date: false, sign: false, noText: false, notes: [] };
       const hasO = i <= dOld.numPages, hasN = i <= dNew.numPages;
       if (!hasO || !hasN) {
-        r.status = "changed";
-        r.notes.push(hasN ? "صفحة جديدة مضافة" : "صفحة محذوفة من النسخة الجديدة");
-        r.diff = hasN ? [] : [];
-        const info = await pageInfo(hasN ? dNew : dOld, i);
-        r.diff = info.words.map((w) => [hasN ? "+" : "-", w]);
-        r.imgNew = hasN ? await toBlob(await render(info.page, 900)) : null;
-        r.imgOld = hasO ? await toBlob(await render(info.page, 900)) : null;
-        r.imgDiff = hasN ? r.imgNew : r.imgOld;
+        r.missing = true; r.date = wantDate; r.sign = wantSign;
+        r.notes.push(hasN ? "الصفحة موجودة في الجديدة بس" : "الصفحة موجودة في القديمة بس");
         results.push(r); continue;
       }
       const [pO, pN] = [await pageInfo(dOld, i), await pageInfo(dNew, i)];
-      const diff = diffWords(pO.words, pN.words);
-      const added = diff.filter((x) => x[0] === "+").length, removed = diff.filter((x) => x[0] === "-").length;
-      const cO = await render(pO.page, 900), cN = await render(pN.page, 900);
-      const vd = visualDiff(cO, cN);
-      r.added = added; r.removed = removed; r.flagged = vd.flagged; r.diff = diff;
-      if (added || removed) { r.status = "changed"; r.notes.push(`نص: +${added} كلمة / -${removed} كلمة`); }
-      if (vd.flagged > 0) {
-        r.status = "changed";
-        r.notes.push(added || removed ? `${vd.flagged} منطقة تغيّر شكلها` : "تغيير في الشكل فقط (خط يد، علامة، صورة، تنسيق)");
+      let cO = null, cN = null, vd = null;
+      if (wantDate) {
+        const dO = extractDates(pO.words), dN = extractDates(pN.words);
+        r.datesOld = dO; r.datesNew = dN;
+        if (!pO.words.length && !pN.words.length) {
+          r.noText = true; r.notes.push("الصفحة صورة (مفيش نص)، التاريخ ما اتقراش — راجعها بنفسك أو اختار «التوقيع / الشكل»");
+        } else if (!sameList(dO, dN)) {
+          r.date = true; r.notes.push(`التاريخ: ${dO.join("، ") || "—"}  ←  ${dN.join("، ") || "—"}`);
+        }
       }
-      if (pO.annots !== pN.annots) {
-        r.status = "changed"; r.notes.push(`تعليقات/علامات: ${pO.annots} ← ${pN.annots}`);
+      if (wantSign) {
+        cO = await render(pO.page, 900); cN = await render(pN.page, 900);
+        vd = visualDiff(cO, cN);
+        if (vd.flagged > 0 || vd.sizeDiff) { r.sign = true; r.notes.push(`تغيير في الشكل/التوقيع: ${vd.flagged} منطقة`); }
       }
-      if (vd.sizeDiff) { r.status = "changed"; r.notes.push("مقاس الصفحة اتغيّر"); }
-      if (r.status === "changed") {
-        [r.imgDiff, r.imgOld, r.imgNew] = await Promise.all([toBlob(vd.canvas), toBlob(cO), toBlob(cN)]);
+      if (r.date || r.sign || r.noText) {
+        cO = cO || await render(pO.page, 900); cN = cN || await render(pN.page, 900);
+        [r.imgOld, r.imgNew] = await Promise.all([toBlob(cO), toBlob(cN)]);
+        r.imgDiff = vd && r.sign ? await toBlob(vd.canvas) : r.imgNew;
       }
       results.push(r);
     }
-    show(dOld.numPages, dNew.numPages);
+    show(list.length);
   } catch (e) {
     console.error(e);
-    alert("حصلت مشكلة في قراءة الملف: " + (e && e.message ? e.message : e));
+    alert("حصلت مشكلة: " + (e && e.message ? e.message : e));
   }
   $("progress").hidden = true; $("go").disabled = false;
 }
 
-function show(nOld, nNew) {
-  const changed = results.filter((r) => r.status === "changed");
-  const v = $("verdict");
-  v.className = changed.length ? "diff" : "same";
-  v.innerHTML = changed.length
-    ? `فيه تعديل ⚠️<small>${changed.length} صفحة فيها اختلاف من ${results.length}</small>`
-    : `مفيش أي تعديل ✅<small>الملفين متطابقين نصًا وشكلًا</small>`;
-  $("stats").innerHTML =
-    `<div><b>${nOld}</b>صفحات القديمة</div><div><b>${nNew}</b>صفحات الجديدة</div><div><b>${changed.length}</b>صفحات معدّلة</div>`;
-  const box = $("pages"); box.innerHTML = "";
-  results.forEach((r) => {
-    const el = document.createElement("div"); el.className = "pg";
-    el.innerHTML = `<span class="n">صفحة ${r.n}</span><span class="d">${r.status === "same" ? "بدون تغيير" : r.notes.join("<br>")}</span>
-      <span class="badge ${r.status === "same" ? "ok" : "ch"}">${r.status === "same" ? "متطابقة" : "معدّلة"}</span>`;
-    if (r.status === "changed") {
-      const b = document.createElement("button"); b.textContent = "عرض"; b.onclick = () => openViewer(r);
-      el.appendChild(b);
-    }
-    box.appendChild(el);
+function group(title, rs, cls) {
+  const g = document.createElement("div"); g.className = "grp";
+  g.innerHTML = `<h3>${title}</h3>`;
+  if (!rs.length) { g.insertAdjacentHTML("beforeend", '<div class="none">مفيش ✅</div>'); return g; }
+  const w = document.createElement("div"); w.className = "chips";
+  rs.forEach((r) => {
+    const b = document.createElement("button"); b.className = "chip " + (cls || ""); b.textContent = r.n;
+    b.onclick = () => openViewer(r); w.appendChild(b);
   });
+  g.appendChild(w); return g;
+}
+
+function show(count) {
+  const wantDate = $("optDate").checked, wantSign = $("optSign").checked;
+  const dates = results.filter((r) => r.date), signs = results.filter((r) => r.sign), nt = results.filter((r) => r.noText);
+  const any = dates.length || signs.length;
+  const v = $("verdict");
+  v.className = any ? "diff" : "same";
+  v.innerHTML = any ? `فيه تعديل ⚠️<small>تمت مقارنة ${count} صفحة</small>` : `مفيش تعديل ✅<small>تمت مقارنة ${count} صفحة</small>`;
+  const box = $("groups"); box.innerHTML = "";
+  if (wantDate) box.appendChild(group("صفحات التاريخ فيها اتغيّر", dates));
+  if (wantSign) box.appendChild(group("صفحات التوقيع / الشكل فيها اتغيّر", signs));
+  if (nt.length) box.appendChild(group("صفحات صور مش نصية (التاريخ ما اتقراش)", nt, "wn"));
   $("result").hidden = false;
   $("result").scrollIntoView({ behavior: "smooth" });
 }
@@ -206,11 +240,7 @@ function openViewer(r) {
   $("vtitle").textContent = `صفحة ${r.n}`;
   const t = $("vtext");
   const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
-  const hasText = r.diff && r.diff.some((x) => x[0] !== "=");
-  t.innerHTML = hasText
-    ? "<h3>الفروق في النص <ins>مضاف</ins> <del>محذوف</del></h3>" +
-      r.diff.map(([k, w]) => (k === "+" ? `<ins>${esc(w)}</ins>` : k === "-" ? `<del>${esc(w)}</del>` : esc(w))).join(" ")
-    : "<h3>مفيش فرق في النص — الفرق في الشكل (الأماكن الحمراء في صورة «الفروق»)</h3>";
+  t.innerHTML = r.notes.map((n) => `<h3>${esc(n)}</h3>`).join("");
   $("viewer").hidden = false;
   document.body.style.overflow = "hidden";
   setMode("diff");

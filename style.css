@@ -41,3 +41,17 @@ h2{font-size:16px;margin:16px 0 8px}
 #vtext h3{margin:8px 0}
 ins{background:#c9f0d6;text-decoration:none;border-radius:3px;padding:0 2px}
 del{background:#ffd3cb;border-radius:3px;padding:0 2px}
+
+.opts{background:#fff;border-radius:12px;padding:12px;margin-bottom:10px}
+.ot{font-weight:700;font-size:14px;margin:8px 0 4px}
+.chk{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:15px}
+.chk input{width:20px;height:20px}
+#rngTxt{width:100%;padding:10px;font-size:16px;border:1px solid #b9c7d8;border-radius:8px;margin-top:4px;direction:ltr;text-align:left}
+#rngTxt:disabled{background:#eef2f6}
+.grp{background:#fff;border-radius:12px;padding:12px;margin-bottom:10px}
+.grp h3{margin:0 0 8px;font-size:15px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:0;border-radius:20px;padding:8px 16px;font-size:16px;font-weight:700;background:#fde6e1;color:#9a2c16}
+.chip.wn{background:#fff1cc;color:#7a5500}
+.none{color:#17613a;font-weight:700}
+.hint{font-size:12px;color:#667;text-align:center}

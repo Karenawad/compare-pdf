@@ -19,15 +19,23 @@
       <input type="file" id="fileOld" accept="application/pdf,.pdf"></label>
     <label class="file" id="lblNew"><span class="tag new">الجديدة</span><span class="name" id="nameNew">اضغط لاختيار الملف الجديد</span>
       <input type="file" id="fileNew" accept="application/pdf,.pdf"></label>
+    <div class="opts">
+      <div class="ot">إيه اللي أقارنه؟</div>
+      <label class="chk"><input type="checkbox" id="optDate" checked> التاريخ</label>
+      <label class="chk"><input type="checkbox" id="optSign"> التوقيع / أي تغيير في الشكل</label>
+      <div class="ot">الصفحات</div>
+      <label class="chk"><input type="radio" name="rng" value="all" checked> كل الصفحات</label>
+      <label class="chk"><input type="radio" name="rng" value="custom"> صفحات محددة</label>
+      <input id="rngTxt" type="text" inputmode="numeric" placeholder="مثال: 1-3,5,8" disabled>
+    </div>
     <button id="go" disabled>قارن</button>
     <div id="progress" hidden><div id="bar"></div><span id="ptext"></span></div>
   </section>
 
   <section id="result" hidden>
     <div id="verdict"></div>
-    <div id="stats"></div>
-    <h2>الصفحات</h2>
-    <div id="pages"></div>
+    <div id="groups"></div>
+    <p class="hint">دوس على رقم الصفحة لعرض التفاصيل</p>
   </section>
 </main>
 
